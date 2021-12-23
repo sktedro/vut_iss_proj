@@ -35,11 +35,11 @@ def transformSignal(frames, sampleRate):
     print("Calculating the DFT")
 
     # FFT
-    magnitudes = abs(np.array([np.fft.fft(frames[k])[0: 1024 // 2] for k in range(len(frames))]))
+    #  magnitudes = abs(np.array([np.fft.fft(frames[k])[0: 1024 // 2] for k in range(len(frames))]))
 
     # DFT
-    #  coeffs = np.array([dft(frames[frame], 1024) for frame in range(len(frames))])
-    #  magnitudes = abs(coeffs)
+    coeffs = np.array([dft(np.array(frames[frame]), 1024) for frame in range(len(frames))])
+    magnitudes = abs(coeffs)
 
     frequencies = [k * sampleRate // 1024 for k in range(1024 // 2)]
     print("DFT calculated")
@@ -168,10 +168,14 @@ print("Amount of samples: ", sampleCount)
 audioLength = sampleCount / sampleRate
 print("Audio length [s]: ", audioLength)
 
+# Get other info about the signal
+print("Min value: ", min(inputSignal))
+print("Max value: ", max(inputSignal))
+
 # Plot the input signal
-#  plt.plot(np.arange(0, audioLength, audioLength / sampleCount)[0: -1], inputSignal)
-#  plt.title("Input signal")
-#  plt.show()
+plt.plot(np.arange(0, audioLength, audioLength / sampleCount)[0: -1], inputSignal)
+plt.title("Input signal")
+plt.show()
 
 # Normalize the data
 normInputAudio = normalizeData(inputSignal, sampleCount)
@@ -181,9 +185,11 @@ frames = getFrames(normInputAudio, sampleCount)
 print("We have", len(frames), "frames, all with length", len(frames[0]))
 
 # Plot one of the frames
-#  plt.plot(np.arange(0, 1024 / sampleRate, 1 / sampleRate), frames[24])
-#  plt.title("Frame #25")
-#  plt.show()
+plt.plot(np.arange(0, 1024 / sampleRate, 1 / sampleRate), frames[24])
+plt.ylabel("Amplitude []")
+plt.xlabel("Time [s]")
+plt.title("Frame #25")
+plt.show()
 
 
 ## Discrete fourier transform
@@ -191,16 +197,14 @@ print("We have", len(frames), "frames, all with length", len(frames[0]))
 magnitudes, frequencies = transformSignal(frames, sampleRate)
 
 # Plot the result
-#  plotDft(frequencies, magnitudes)
+plotDft(frequencies, magnitudes)
 
 
 ## Spectrogram
 
 # Calculate the spectrogram values
 spectrogram = getSpectrogram(magnitudes)
-
-# Plot the spectrogram
-#  plotSpectrogram(frequencies, spectrogram, audioLength)
+plotSpectrogram(frequencies, spectrogram, audioLength)
 
 
 ## Finding the disruptive frequencies
@@ -218,6 +222,12 @@ disruptiveCosines = generateDisruptiveCosines(disruptiveFreqsAmount, disruptiveC
 # Write the cosines to a file
 writeDisruptiveCosines(disruptiveCosines, sampleCount, sampleRate)
 
+# Plot a spectrogram of these cosines
+frames = getFrames(disruptiveCosines, sampleCount)
+magnitudes, frequencies = transformSignal(frames, sampleRate)
+spectrogram = getSpectrogram(magnitudes)
+plotSpectrogram(frequencies, spectrogram, audioLength)
+
 
 ## Creating a filter
 
@@ -225,20 +235,22 @@ writeDisruptiveCosines(disruptiveCosines, sampleCount, sampleRate)
 zeros, poles, gains = createZPKFilters(disruptiveFreqs, disruptiveFreqsAmount, sampleRate)
 
 # Plot the zeros and poles of the filter
-#  print("Zeros: ")
-#  print(zeros[0])
-#  print("Poles: ")
-#  print(poles[0])
-#  plotZP(np.array(zeros[0]), np.array(poles[0]))
+print("Zeros: ")
+print(zeros[0])
+print("Poles: ")
+print(poles[0])
+plotZP(np.array(zeros[0]), np.array(poles[0]))
 
 # Convert ZPK to SOS so it's easier to work with
 sos = [signal.zpk2sos(zeros[i], poles[i], gains[i]) for i in range(disruptiveFreqsAmount)]
+print("Filters coefficients:")
+[print(sos[i]) for i in range(disruptiveFreqsAmount)]
 
 # Calculate and plot the impulse responses
-#  plotFilterImpulseResponse(sos, disruptiveFreqs, disruptiveFreqsAmount, 1024)
+plotFilterImpulseResponse(sos, disruptiveFreqs, disruptiveFreqsAmount, 512)
 
 # Calculate and plot the frequency response
-#  plotFilterFrequencyResponses(sos, disruptiveFreqs, sampleCount, sampleRate)
+plotFilterFrequencyResponses(sos, disruptiveFreqs, sampleCount, sampleRate)
 
 
 ## Filter the signal, normalize it and write it to a file
@@ -252,10 +264,10 @@ for filterSetting in sos:
 filteredAudio = normalizeData(filteredAudio, sampleCount)
 
 # Plot a spectrogram of the filtered audio
-#  frames = getFrames(filteredAudio, sampleCount)
-#  magnitudes, frequencies = transformSignal(frames, sampleRate)
-#  spectrogram = getSpectrogram(magnitudes)
-#  plotSpectrogram(frequencies, spectrogram, audioLength)
+frames = getFrames(filteredAudio, sampleCount)
+magnitudes, frequencies = transformSignal(frames, sampleRate)
+spectrogram = getSpectrogram(magnitudes)
+plotSpectrogram(frequencies, spectrogram, audioLength)
 
 # Write the audio to a file
 wav_file = wave.open("./audio/clean_bandstop.wav", "w")
