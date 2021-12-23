@@ -7,16 +7,13 @@ import matplotlib
 import wave
 import struct
 
-# TODO v cos ani sin nemá byť 2 * pi asi 
 
 def normalizeData(inputSignal, sampleCount):
     # Subtract the average
     avgVal = sum(inputSignal) / sampleCount
     normInputAudio = inputSignal - avgVal
-
     # Divide by the maximum value
     normInputAudio = normInputAudio / max(abs(normInputAudio))
-
     return normInputAudio
 
 def getFrames(inputSignal, sampleCount):
@@ -51,6 +48,7 @@ def transformSignal(frames, sampleRate):
 
 def plotDft(frequencies, magnitudes):
     plt.plot(frequencies, magnitudes[0])
+    plt.title("Discrete fourier transform")
     plt.ylabel("Magnitude []")
     plt.xlabel("Frequency [Hz]")
     plt.show()
@@ -63,6 +61,7 @@ def plotSpectrogram(frequencies, spectrogram, audioLength):
     plt.pcolormesh(time, frequencies, spectrogram, shading='gouraud')
     plt.ylabel('Frequency [Hz]')
     plt.xlabel('Time [s]')
+    plt.title("Spectrogram")
     plt.show()
 
 def getDisruptiveFreqs(cosAmount, magnitudes, frequencies):
@@ -140,16 +139,18 @@ def plotFilterImpulseResponse(sos, freqs, plotCount, sampleCount):
     fig, axes = plt.subplots(plotCount)
     for i in range(len(sos)):
         impulseResponse = signal.sosfilt(sos[i], impulseResponseInputs)
-        axes[i].set_title("Filter for frequency " + str(freqs[i]) + " Hz")
+        axes[i].set_title("Impulse response (" + str(freqs[i]) + " Hz)")
         axes[i].plot(impulseResponse)
     fig.tight_layout()
     plt.show()
 
-def plotFilterFrequencyResponses(sos, sampleCount, sampleRate):
+def plotFilterFrequencyResponses(sos, frequencies, sampleCount, sampleRate):
     fig, axes = plt.subplots(len(sos))
     for i in range(len(sos)):
         freqs, mags = signal.sosfreqz(sos[i], sampleCount, False, sampleRate)
+        axes[i].set_title("Frequency response (" + str(frequencies[i]) + " Hz)")
         axes[i].plot(freqs, abs(mags))
+    fig.tight_layout()
     plt.show()
 
 
@@ -169,6 +170,7 @@ print("Audio length [s]: ", audioLength)
 
 # Plot the input signal
 #  plt.plot(np.arange(0, audioLength, audioLength / sampleCount)[0: -1], inputSignal)
+#  plt.title("Input signal")
 #  plt.show()
 
 # Normalize the data
@@ -180,6 +182,7 @@ print("We have", len(frames), "frames, all with length", len(frames[0]))
 
 # Plot one of the frames
 #  plt.plot(np.arange(0, 1024 / sampleRate, 1 / sampleRate), frames[24])
+#  plt.title("Frame #25")
 #  plt.show()
 
 
@@ -235,7 +238,7 @@ sos = [signal.zpk2sos(zeros[i], poles[i], gains[i]) for i in range(disruptiveFre
 #  plotFilterImpulseResponse(sos, disruptiveFreqs, disruptiveFreqsAmount, 1024)
 
 # Calculate and plot the frequency response
-#  plotFilterFrequencyResponses(sos, sampleCount, sampleRate)
+#  plotFilterFrequencyResponses(sos, disruptiveFreqs, sampleCount, sampleRate)
 
 
 ## Filter the signal, normalize it and write it to a file
@@ -259,80 +262,3 @@ wav_file = wave.open("./audio/clean_bandstop.wav", "w")
 wav_file.setparams((1, 2, sampleRate, sampleCount, "NONE", ""))
 for sample in filteredAudio:
     wav_file.writeframes(struct.pack('h', int(sample * 0x7fff)))
-
-
-
-
-#  quit(0)
-### BONUSES
-
-## Get the exact frequencies
-def getExactDisruptiveFreqs(inputSignal, sampleRate):
-    sampleCount = len(inputSignal)
-    frames = getFrames(inputSignal, sampleCount)
-    magnitudes = abs(np.array([np.fft.fft(frames[k])[0: 1024 // 2] for k in range(len(frames))]))
-    frequencies = [k * sampleRate // 1024 for k in range(1024)]
-    approxFreqs = getDisruptiveFreqs(4, magnitudes, frequencies)
-
-    exactFreqs = []
-    maxCorrelCoeffs = []
-
-    # Get the exact disruptive frequencies
-    for freq in approxFreqs:
-        # Search in interval <freq - 20, freq + 20>
-        testRange = 8
-        testFreqs = np.arange(freq - testRange, freq + testRange, 1)
-        correlCoeffs = []
-        testSamples = int(sampleCount / 10)
-
-        # For every frequency in that inteval, generate a cosine and 
-        # multiply the input signal by it to get correlation coeffs
-        for testFreq in testFreqs:
-            # TODO which one? With 2pi?
-            cos = [np.cos(2 * np.pi * testFreq * n / sampleRate) for n in range(testSamples)]
-            #  cos = [np.cos(testFreq * n / sampleRate) for n in range(testSamples)]
-            correlCoeffs.append(int(abs(sum(inputSignal[0: testSamples] * cos))))
-
-        # Get the frequency with the highest correlation coefficient
-        maxCorrelCoeff = max(np.array(correlCoeffs))
-        correlCoeffIndex = correlCoeffs.index(maxCorrelCoeff)
-        maxCorrelCoeffs.append(maxCorrelCoeff)
-        exactFreqs.append(testFreqs[correlCoeffIndex])
-
-    return exactFreqs, maxCorrelCoeffs
-#  disruptiveFreqs, maxCorrelCoeffs = getExactDisruptiveFreqs(inputSignal, sampleRate)
-#  print("Exact disruptive frequencies: " + str(disruptiveFreqs))
-
-
-#  c = 16384
-#  magnitudes = abs(np.fft.fft(inputSignal[0: c])[0: c // 2])
-#  frequencies = [k * sampleRate // c for k in range(c)]
-
-print("Calculating DFT")
-magnitudes = abs(dft(inputSignal, sampleCount))
-print("DFT calculated")
-frequencies = [k * sampleRate // sampleCount for k in range(sampleCount)]
-
-maxMagnitudesIndices = np.argpartition(magnitudes, -4)[-4:]
-disruptiveFreqs = []
-for i in range(4):
-    disruptiveFreqs.append(frequencies[maxMagnitudesIndices[i]])
-print("Exact disruptive frequencies: " + str(disruptiveFreqs))
-
-#  print("Their correlation coefficients: ")
-#  print(maxCorrelCoeffs)
-
-def getDisruptiveFreqsAmplitudes(inputSignal, framesAmount, sampleCount):
-    sampleCount = len(inputSignal)
-    frames = getFrames(inputSignal, sampleCount)[0: framesAmount]
-    magnitudes = abs(np.array([np.fft.fft(frames[k])[0: 1024 // 2] for k in range(len(frames))]))
-    approxFreqs = getDisruptiveFreqs(4, magnitudes)
-
-    for freq in approxFreqs:
-        amplitude = []
-        for magnitude in magnitudes:
-            amplitude.append(magnitude[freq * 1024 // sampleRate])
-        amplitude = (sum(amplitude) / len(amplitude)) * 2 / 1024
-        print("Amplitude of a cosine with frequency " + str(freq) + " is " + str(amplitude))
-
-#  getDisruptiveFreqsAmplitudes(inputSignal, disruptiveFreqsAmount, sampleCount)
